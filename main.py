@@ -2,20 +2,24 @@ import threading
 import time
 import math
 
+eventNewPacketContiki = threading.Event()
+eventNewPacketSecuPAN = threading.Event()
 
-event_signal_new_packet = threading.Event()
-
-condition = threading.Condition()
-
-lockAttack = threading.Lock()
+lockAttackContiki = threading.Lock()
+lockAttackSecuPAN = threading.Lock()
 
 threads = []
 exitFlag = 0
 
 totalPacketSent = 0
-totalPacketReceived = 0
-totalTime = 0
-attackFlag = 0
+totalPacketReceivedContiki = 0
+totalPacketReceivedSecuPAN = 0;
+
+totalTimeContiki = 0
+totalTimeSecuPAN = 0
+
+attackFlagContiki = 0
+attackFlagSecuPAN = 0
 
 simulationTime = 120 # 120 ms
 packetSendingInterval = 0.3 # 300 ms
@@ -31,12 +35,6 @@ numberofHops = 2
 endToEndDelayForAllFragment = hopToHopDelay * numberofHops * numberOfFragment
 endToEndDelayForSingleFragment = hopToHopDelay * numberofHops
 
-contiki = 0 # without SecuPAN
-
-#print ("sleep time for a packet %f" % (endToEndDelayForAllFragment / 1000))
-#print ("sleep time for single fragment %f" % (endToEndDelayForSingleFragment / 1000))
-
-# print('Thread got event: %s' % tname)
 
 def controller():
     global exitFlag
@@ -44,7 +42,8 @@ def controller():
     time.sleep(simulationTime);
     print('controller Thread: simulation time is over')
     exitFlag = 1;
-    event_signal_new_packet.set()
+    eventNewPacketContiki.set()
+    eventNewPacketSecuPAN.set()
     print('Controller Thread: controller thread ended')
 
 
@@ -55,55 +54,84 @@ def sender():
     while exitFlag == 0:
         totalPacketSent = totalPacketSent + 1
         print('Sender thread: sending a packet')
-        event_signal_new_packet.set()
+        eventNewPacketSecuPAN.set()
+        eventNewPacketContiki.set()
         time.sleep(packetSendingInterval)
     print('Sender thread: sender thread ended')
 
 
-def receiver():
-    print("Receiver thread started")
+def receiverContiki():
+    print("Receiver Thread (Contiki): reciever started")
     global exitFlag
-    global totalPacketReceived
-    global attackFlag
-    global totalTime
+    global totalPacketReceivedContiki
+    global attackFlagContiki
+    global totalTimeContiki
 
     while exitFlag == 0:
-        print("Receiver Thread: waiting for packet to arrive")
-        event_signal_new_packet.clear()  # need to take care the position of the .clear method
-        event_signal_new_packet.wait()
-        print("Receiver Thread: packet received")
-        totalPacketReceived = totalPacketReceived + 1
-        totalTime = totalTime + endToEndDelayForAllFragment
+        print("Receiver Thread (Contiki): waiting for packet to arrive")
+        eventNewPacketContiki.clear()  # need to take care the position of the .clear method
+        eventNewPacketContiki.wait()
+        print("Receiver Thread (Contiki): packet received")
+        totalPacketReceivedContiki = totalPacketReceivedContiki + 1
+        totalTimeContiki = totalTimeContiki + endToEndDelayForAllFragment
 
-        lockAttack.acquire()
-        if attackFlag:
-            attackFlag = 0
-            lockAttack.release()
-            print("Receiver Thread: attack occured")
-            if contiki:
-                totalTime = totalTime + endToEndDelayForAllFragment
-                print("Receiver Thread: Going to sleep due to attack (Contiki)")
-                time.sleep(endToEndDelayForAllFragment / 1000)
-            else:  # SecuPAN
-                # or I can skip this delay for SecuPAN for better preformance
-                print("Receiver Thread: Going to sleep due to attack (SecuPAN)")
-                time.sleep(endToEndDelayForSingleFragment / 1000)
-                totalTime = totalTime + endToEndDelayForSingleFragment
+        lockAttackContiki.acquire()
+        if attackFlagContiki:
+            attackFlagContiki = 0
+            lockAttackContiki.release()
+            print("Receiver Thread (Contiki): attack occured")
+            totalTimeContiki = totalTimeContiki + endToEndDelayForAllFragment
+            print("Receiver Thread (Contiki): Going to sleep due to attack (Contiki)")
+            time.sleep(endToEndDelayForAllFragment / 1000)
+
         else:
-            lockAttack.release()
+            lockAttackContiki.release()
 
+def receiverSecuPAN():
+    print("Receiver Thread (SecuPAN): receiver started")
+    global exitFlag
+    global totalPacketReceivedSecuPAN
+    global attackFlagSecuPAN
+    global totalTimeSecuPAN
+
+    while exitFlag == 0:
+        print("Receiver Thread (SecuPAN): waiting for packet to arrive")
+        eventNewPacketSecuPAN.clear()  # need to take care the position of the .clear method
+        eventNewPacketSecuPAN.wait()
+        print("Receiver Thread (SecuPAN): packet received")
+        totalPacketReceivedSecuPAN = totalPacketReceivedSecuPAN + 1
+        totalTimeSecuPAN = totalTimeSecuPAN + endToEndDelayForAllFragment
+
+        lockAttackSecuPAN.acquire()
+        if attackFlagSecuPAN:
+            attackFlagSecuPAN = 0
+            lockAttackSecuPAN.release()
+            print("Receiver Thread (SecuPAN): attack occured")
+            print("Receiver Thread (SecuPAN): Going to sleep due to attack (SecuPAN)")
+            time.sleep(endToEndDelayForSingleFragment / 1000)
+            totalTimeSecuPAN = totalTimeSecuPAN + endToEndDelayForSingleFragment
+        else:
+            lockAttackSecuPAN.release()
 
 def attacker():
     print("Attacker Thread: Attacker thread started")
     global exitFlag
-    global attackFlag
+    global attackFlagContiki
+    global attackFlagSecuPAN
 
     while exitFlag == 0:
         time.sleep(attackInterval)
-        lockAttack.acquire()
-        print("Attacker Thread: preforming attack")
-        attackFlag = 1
-        lockAttack.release()
+
+        lockAttackContiki.acquire()
+        print("Attacker Thread: preforming attack on Contiki")
+        attackFlagContiki = 1
+        lockAttackContiki.release()
+
+        lockAttackSecuPAN.acquire()
+        print("Attacker Thread: preforming attack on SecuPAN")
+        attackFlagSecuPAN = 1
+        lockAttackSecuPAN.release()
+
     print("Attacker Thread: Attacker thread ended")
 
 
@@ -111,9 +139,14 @@ t = threading.Thread(target=sender)
 threads.append(t)
 t.start()
 
-t = threading.Thread(target=receiver)
+t = threading.Thread(target=receiverContiki)
 threads.append(t)
 t.start()
+
+t = threading.Thread(target=receiverSecuPAN)
+threads.append(t)
+t.start()
+
 
 t = threading.Thread(target=attacker)
 threads.append(t)
@@ -126,11 +159,12 @@ t.start()
 for t in threads:
     t.join()
 
-if contiki :
-    print("Contiki Simulation Outcome")
-else :
-    print ("SecuPAN Simulation Outcome")
 
 print("Total Number of Packets Sent %d" %(totalPacketSent))
-print("Total Number of Packet Received %d" %(totalPacketReceived))
-print ("Total time taken for receving pacekts: %d ms" %(totalTime))
+
+print("Total Number of Packet Received (Contiki) %d" %(totalPacketReceivedContiki))
+print ("Total time taken for receving pacekts (Contiki): %d ms" %(totalTimeContiki))
+
+
+print("Total Number of Packet Received (SecuPAN) %d" %(totalPacketReceivedSecuPAN))
+print ("Total time taken for receving pacekts (SecuPAN): %d ms" %(totalTimeSecuPAN))
