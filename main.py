@@ -35,17 +35,15 @@ numberofHops = 2
 endToEndDelayForAllFragment = hopToHopDelay * numberofHops * numberOfFragment
 endToEndDelayForSingleFragment = hopToHopDelay * numberofHops
 
-
 def controller():
     global exitFlag
     print('controller Thread: controller thread started')
-    time.sleep(simulationTime);
+    time.sleep(simulationTime)
     print('controller Thread: simulation time is over')
-    exitFlag = 1;
+    exitFlag = 1
     eventNewPacketContiki.set()
     eventNewPacketSecuPAN.set()
     print('Controller Thread: controller thread ended')
-
 
 def sender():
     print('Sender thread: sender thread started')
@@ -58,7 +56,6 @@ def sender():
         eventNewPacketContiki.set()
         time.sleep(packetSendingInterval)
     print('Sender thread: sender thread ended')
-
 
 def receiverContiki():
     print("Receiver Thread (Contiki): reciever started")
