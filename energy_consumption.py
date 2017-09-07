@@ -10,20 +10,23 @@ lockAttackSecuPAN = threading.Lock()
 
 lockPrintResult = threading.Lock()
 
-threads = []
 exitFlag = 0
-
 attackFlagContiki = 0
 attackFlagSecuPAN = 0
 
-simulationTime = 15 # 120 sec
+simulationTime = 120 # 120 sec
 packetSendingInterval = 0.3 # 300 ms
 
-attackInterval = .5 # 500 ms second
+attackInterval = .5 # 500, 1000, and 1500 ms
 
 
 totalPacketSent = 0
 
+def printEnergyResult (simulation_time, attack_interval, scheme, routing,  number_packet_retransmitted, retransmission_energy_per_packet, total_energy_consumption):
+    lockPrintResult.acquire()
+    print("Simualtion Time (sec), Attack Interval (ms), Scheme, Routing, Number of Packet Retransmitted, Retransmission Energy Per Packet, Total Energy Consumption (mj)")
+    print ("%d, %.2f, %s, %s, %d, %d, %d" %(simulation_time, attack_interval, scheme, routing,  number_packet_retransmitted, retransmission_energy_per_packet, total_energy_consumption))
+    lockPrintResult.release()
 
 
 def printSimulationOutcome (scheme, routing, totalNumberOfPacketSent, totalNumberOfPacketReceived, totalTimeTakenReceivingPackets, numberOfPacketRetransmitted, totalEnergyConsumption):
@@ -50,13 +53,13 @@ def sender(packet_sending_interval):
     global totalPacketSent
     while exitFlag == 0:
         totalPacketSent = totalPacketSent + 1
-        print('Sender thread: sending a packet')
+        #print('Sender thread: sending a packet')
         eventNewPacketSecuPAN.set()
         eventNewPacketContiki.set()
         time.sleep(packet_sending_interval)
     print('Sender thread: sender thread ended')
 
-def receiverContikiEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, packetSize, fragmentSize, totalNumberOfFragment):
+def receiverContikiEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, packetSize, fragmentSize, totalNumberOfFragment,simulation_time, attack_interval):
     print("Receiver Thread (Contiki): reciever started")
 
     global exitFlag
@@ -71,10 +74,10 @@ def receiverContikiEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, pac
     energyConsumptionForSendingPacket = fragmentSendingEnergy * totalNumberOfFragment
 
     while exitFlag == 0:
-        print("Receiver Thread (Contiki): waiting for packet to arrive")
+        #print("Receiver Thread (Contiki): waiting for packet to arrive")
         eventNewPacketContiki.clear()  # need to take care the position of the .clear method
         eventNewPacketContiki.wait()
-        print("Receiver Thread (Contiki): packet received")
+        #print("Receiver Thread (Contiki): packet received")
         totalTimeForRecivingPackets += endtoEndDelay
         totalEnergyConsumptionForReceivingPackets += energyConsumptionForSendingPacket
         totalNumberOfReceivedPackets += 1
@@ -83,20 +86,26 @@ def receiverContikiEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, pac
         if attackFlagContiki:
             attackFlagContiki = 0
             lockAttackContiki.release()
-            print("Receiver Thread (Contiki): attack occured")
+            #print("Receiver Thread (Contiki): attack occured")
 
             totalTimeForRecivingPackets += endtoEndDelay # delay for sending the entire parcekt (all the fragments of a packet)
             totalEnergyConsumptionForReceivingPackets += energyConsumptionForSendingPacket # energy consumption for sending all the fragments of the altered packet
             totalNumberOfAttacks += 1
 
-            print("Receiver Thread (Contiki): Going to sleep due to attack (Contiki)")
-            time.sleep(endtoEndDelay / 1000)
+            #print("Receiver Thread (Contiki): Going to sleep due to attack (Contiki)")
+            sleep_duration = endtoEndDelay/(attack_interval/.5) #.5 sec is the base attack intervale. For 1 sec or 1.5 sec the sleep time decreases
+            time.sleep(sleep_duration / 1000)
         else:
             lockAttackContiki.release()
 
-    printSimulationOutcome ("Contiki", "Mesh-under", totalPacketSent, totalNumberOfReceivedPackets, totalTimeForRecivingPackets,totalNumberOfAttacks,totalEnergyConsumptionForReceivingPackets)
+    print ("Contiki -> Total Energy Consumption (%d), Total Received Packet (%d), Number of Retransmitted Packets (%d)" %(totalEnergyConsumptionForReceivingPackets, totalNumberOfReceivedPackets, totalNumberOfAttacks))
+    #average_energy_consumption = totalEnergyConsumptionForReceivingPackets/ (totalNumberOfReceivedPackets + totalNumberOfAttacks)
+    average_energy_consumption = totalEnergyConsumptionForReceivingPackets / totalNumberOfReceivedPackets
+    print ("Contiki average energy consumption %d" %(average_energy_consumption))
+    #printEnergyResult(simulation_time,attack_interval,"Contiki", "Mesh-under",totalNumberOfAttacks,energyConsumptionForSendingPacket,totalNumberOfAttacks*energyConsumptionForSendingPacket)
+    #printSimulationOutcome ("Contiki", "Mesh-under", totalPacketSent, totalNumberOfReceivedPackets, totalTimeForRecivingPackets,totalNumberOfAttacks,totalEnergyConsumptionForReceivingPackets)
 
-def receiverSecuPANEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, packetSize, fragmentSize, totalNumberOfFragment):
+def receiverSecuPANEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, packetSize, fragmentSize, totalNumberOfFragment, simulation_time, attack_interval):
     print("Receiver Thread (SecuPAN): reciever started")
 
     global exitFlag
@@ -111,10 +120,10 @@ def receiverSecuPANEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, pac
     energyConsumptionForSendingPacket = fragmentSendingEnergy * totalNumberOfFragment
 
     while exitFlag == 0:
-        print("Receiver Thread (SecuPAN): waiting for packet to arrive")
+        #print("Receiver Thread (SecuPAN): waiting for packet to arrive")
         eventNewPacketContiki.clear()  # need to take care the position of the .clear method
         eventNewPacketContiki.wait()
-        print("Receiver Thread (SecuPAN): packet received")
+        #print("Receiver Thread (SecuPAN): packet received")
         totalTimeForRecivingPackets += endtoEndDelay
         totalEnergyConsumptionForReceivingPackets += energyConsumptionForSendingPacket
         totalNumberOfReceivedPackets += 1
@@ -123,18 +132,23 @@ def receiverSecuPANEx(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, pac
         if attackFlagSecuPAN:
             attackFlagSecuPAN = 0
             lockAttackSecuPAN.release()
-            print("Receiver Thread (SecuPAN): attack occured")
+        #    print("Receiver Thread (SecuPAN): attack occured")
 
             totalTimeForRecivingPackets += hopToHopDelay # delay for sending the fabricated/altered fragment
             totalEnergyConsumptionForReceivingPackets += fragmentSendingEnergy # energy consumption for sending the altered fragment
             totalNumberOfAttacks += 1
-
-            print("Receiver Thread (SecuPAN): Going to sleep due to attack (SecuPAN)")
-            time.sleep(endtoEndDelay / 1000)
+            sleep_time = endtoEndDelay / attack_interval # sleep_time decreases as attack interval increases
+        #    print("Receiver Thread (SecuPAN): Going to sleep due to attack (SecuPAN)")
+            time.sleep(sleep_time / 1000)
         else:
             lockAttackSecuPAN.release()
+    print ("SecuPAN -> Total Energy Consumption (%d), Total Received Packet (%d), Number of Retransmitted Packets (%d)" %(totalEnergyConsumptionForReceivingPackets, totalNumberOfReceivedPackets, totalNumberOfAttacks))
+    #average_energy_consumption = totalEnergyConsumptionForReceivingPackets/ (totalNumberOfReceivedPackets + totalNumberOfAttacks)
+    average_energy_consumption = totalEnergyConsumptionForReceivingPackets / totalNumberOfReceivedPackets
+    print ("SecuPAN average energy consumption %d" %(average_energy_consumption))
 
-    printSimulationOutcome ("SecuPAN", "Mesh-under", totalPacketSent, totalNumberOfReceivedPackets, totalTimeForRecivingPackets,totalNumberOfAttacks,totalEnergyConsumptionForReceivingPackets)
+    #printEnergyResult(simulation_time,attack_interval,"SecuPAN", "Mesh-under",totalNumberOfAttacks,fragmentSendingEnergy,totalNumberOfAttacks*fragmentSendingEnergy)
+    #printSimulationOutcome ("SecuPAN", "Mesh-under", totalPacketSent, totalNumberOfReceivedPackets, totalTimeForRecivingPackets,totalNumberOfAttacks,totalEnergyConsumptionForReceivingPackets)
 
 
 def attacker(attack_interval):
@@ -147,12 +161,12 @@ def attacker(attack_interval):
         time.sleep(attack_interval)
 
         lockAttackContiki.acquire()
-        print("Attacker Thread: preforming attack on Contiki")
+    #    print("Attacker Thread: preforming attack on Contiki")
         attackFlagContiki = 1
         lockAttackContiki.release()
 
         lockAttackSecuPAN.acquire()
-        print("Attacker Thread: preforming attack on SecuPAN")
+    #    print("Attacker Thread: preforming attack on SecuPAN")
         attackFlagSecuPAN = 1
         lockAttackSecuPAN.release()
 
@@ -162,43 +176,53 @@ def attacker(attack_interval):
 hopToHopDelay = 58   # ms for mesh-under
 totalNumerOfHop = 2  # total number of intermediate nodes including the receiving node
 
-fragmentSendingEnergy = 10 # mj for mesh-under
-packetSize = 128 # in bytes
+fragmentSendingEnergy = 15 #10 mj for mesh-under and 15 mj for route-over
+packetSize = 128 # in bytes (128, 256, 512)
 
-fragmentSize = 29 # in bytes for mesh-under
+fragmentSize = 46 #29 # in bytes for mesh-under
 totalNumberOfFragment = math.ceil(packetSize/fragmentSize)
 
-t = threading.Thread(target=sender, args=(packetSendingInterval,))
-threads.append(t)
-t.start()
+arrPacketSize = [128, 256, 512] # packet size in bytes
+arrAttackInterval = [.5, 1.0, 1.5] # attack interval 500, 1000, and 1500 ms
 
-t = threading.Thread(target=receiverContikiEx, args=(hopToHopDelay,totalNumerOfHop,fragmentSendingEnergy,packetSize,fragmentSendingEnergy,totalNumberOfFragment,))
-threads.append(t)
-t.start()
+for atkinterval in arrAttackInterval:
+    print("Attack Interval: %.2f" %(atkinterval))
+    for psize in arrPacketSize:
+        print ("Packet Size: %d" %psize)
 
-t = threading.Thread(target=receiverSecuPANEx, args=(hopToHopDelay,totalNumerOfHop,fragmentSendingEnergy,packetSize,fragmentSendingEnergy,totalNumberOfFragment,))
-threads.append(t)
-t.start()
+        #global exitFlag
+        #global attackFlagContiki
+        #global attackFlagSecuPAN
 
+        exitFlag= 0
+        attackFlagContiki = 0
+        attackFlagSecuPAN = 0
 
-t = threading.Thread(target=attacker, args=(attackInterval,))
-threads.append(t)
-t.start()
+        totalNumberOfFragment = math.ceil(psize / fragmentSize)
 
-t = threading.Thread(target=controller, args= (simulationTime,))
-threads.append(t)
-t.start()
+        threads = []
+        t = threading.Thread(target=sender, args=(packetSendingInterval,))
+        threads.append(t)
+        t.start()
 
-for t in threads:
-    t.join()
+        t = threading.Thread(target=receiverContikiEx, args=(
+        hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, psize, fragmentSendingEnergy, totalNumberOfFragment,simulationTime, atkinterval,))
+        threads.append(t)
+        t.start()
+
+        t = threading.Thread(target=receiverSecuPANEx, args=(hopToHopDelay, totalNumerOfHop, fragmentSendingEnergy, psize, fragmentSendingEnergy, totalNumberOfFragment, simulationTime, atkinterval,))
+        threads.append(t)
+        t.start()
+
+        t = threading.Thread(target=attacker, args=(atkinterval,))
+        threads.append(t)
+        t.start()
+
+        t = threading.Thread(target=controller, args=(simulationTime,))
+        threads.append(t)
+        t.start()
+
+        for t in threads:
+            t.join()
 
 print ("All Done !!!")
-
-#print("Total Number of Packets Sent %d" %(totalPacketSent))
-
-#print("Total Number of Packet Received (Contiki) %d" %(totalPacketReceivedContiki))
-#print ("Total time taken for receving pacekts (Contiki): %d ms" %(totalTimeContiki))
-
-
-#print("Total Number of Packet Received (SecuPAN) %d" %(totalPacketReceivedSecuPAN))
-#print ("Total time taken for receving pacekts (SecuPAN): %d ms" %(totalTimeSecuPAN))
