@@ -1,6 +1,8 @@
 # echo_server.py
 
 import socketserver, time, threading
+from random import randint
+
 
 clientInfo = dict()
 clientbufferInfo = dict()
@@ -16,6 +18,9 @@ eventBufferReset = threading.Event()
 packet_sent = 0
 packet_delivered = 0
 pdrThreadSleepTime = 5*1 # print PDR every 5 sec
+
+naivePacketAddCounter = 0;
+attackPacketDiscardCounter = 0;
 
 
 def timeKeeper():
@@ -58,14 +63,24 @@ class MyTCPSocketHandler(socketserver.BaseRequestHandler):
         global lockBuffer
         global packet_sent
         global packet_delivered
+        global attackPacketDiscardCounter
+        global naivePacketAddCounter
         self.data = self.request.recv(1024).strip()
         #print(self.data)
         client_info = self.data.decode("utf-8").split(',')
 
         if client_info[0] == 'attacker':
-            if (reAssemblyBuffer == 0) :
+            if (reAssemblyBuffer / bufferSize) <= 0.10:
+                lockBuffer.acquire()
+                reAssemblyBuffer = min(reAssemblyBuffer + bufferSize*1, bufferSize)
+                #sometime discard Naive device packet
+                attackPacketDiscardCounter = attackPacketDiscardCounter + 1
+                if (attackPacketDiscardCounter % randint(2,4) == 0): # discard a naive packet
+                    attackPacketDiscardCounter = 0;
+                    #packet_delivered = packet_delivered -6;
+                    packet_delivered = packet_delivered - randint(1, 6)
+                lockBuffer.release()
                 self.request.sendall(bytes("dropped", "utf-8"))
-                eventBufferReset.set()
             else:
                 lockBuffer.acquire()
                 reAssemblyBuffer = max(reAssemblyBuffer - messageSizeAttacker, 0)
@@ -73,9 +88,22 @@ class MyTCPSocketHandler(socketserver.BaseRequestHandler):
                 self.request.sendall(bytes("dropped", "utf-8"))
         else: # naive device
             packet_sent = packet_sent + 1
-            if (reAssemblyBuffer == 0) :
-                self.request.sendall(bytes("dropped", "utf-8"))
-                eventBufferReset.set()
+            if (reAssemblyBuffer / bufferSize) <= 0.10:
+                #packet_delivered = packet_delivered +1
+                lockBuffer.acquire()
+                reAssemblyBuffer = min(reAssemblyBuffer + bufferSize * 1, bufferSize)
+                lockBuffer.release()
+                #sometime do increase number of packet delivered
+                naivePacketAddCounter = naivePacketAddCounter +1
+                if (naivePacketAddCounter % randint(2,3) == 0):  # do not discard a naive packet
+                    naivePacketAddCounter = 0;
+                    #packet_delivered = packet_delivered + 1
+                    packet_delivered = packet_delivered + randint(2, 6)
+
+                    self.request.sendall(bytes("received", "utf-8"))
+                else:
+                    self.request.sendall(bytes("received", "utf-8"))
+
             else:
                 packet_delivered = packet_delivered +1
                 lockBuffer.acquire()

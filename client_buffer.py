@@ -10,7 +10,13 @@ client_attacker = "attacker"
 data_attacker = "data attacker"
 
 pdrThreadSleepTime = 5 # print PDR every 5 sec
-packetSendingIntervalNaive = .6 # 1 packet every 600 ms
+
+#this configuration is for base-contiki client. Uncomment this config and comment the config below when you want to generate PDR for base-contiki
+#packetSendingIntervalNaive = .6 # 1 packet every 600 ms
+
+#this configuraiton is for SecuPAN. Uncomment this config and comment the config above when you want to generate PDR for SecuPAN
+packetSendingIntervalNaive = .4 # 1 packet every 600 ms
+
 packetSendingIntervalAttacker = .2 # 1 packet every 200 ms
 
 simulationTime = 60 * 10 # x min
